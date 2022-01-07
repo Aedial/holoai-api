@@ -37,10 +37,10 @@ def hash(*args: bytes) -> bytes:
 def hash_padded(*args: bytes) -> bytes:
     return hash(*(pad_bytes(a, NG_BYTES) for a in args))
 
-def compute_identity_hash(P: str) -> bytes:
-    return hash(P.encode())
+def compute_identity_hash(P: bytes) -> bytes:
+    return hash(P)
 
-def compute_x(s: int, P: str) -> int:
+def compute_x(s: int, P: bytes) -> int:
     return btoi(hash(itob(s), compute_identity_hash(P)))
 
 def random_bytes(length: int) -> int:
@@ -51,7 +51,7 @@ def create_verifier(s: int, P: str) -> int:
 
     return pow(2, x, N)
 
-def create_verifier_and_salt(password: str) -> Tuple[int, int]:
+def create_verifier_and_salt(password: bytes) -> Tuple[int, int]:
     """
     Create a verifier and a salt for a given password. Used for user registration.
 
@@ -81,7 +81,7 @@ def compute_client_session_key(k: int, x: int, u: int, a: int, B: int) -> int:
 def compute_client_evidence(A: int, B: int, S: int) -> int:
     return btoi(hash(itob(A), itob(B), itob(S)))
 
-def process_challenge(password: str, salt: bytes, challenge: int) -> Tuple[int, int, int, int, int, int, int]:
+def process_challenge(password: bytes, salt: bytes, challenge: int) -> Tuple[int, int, int, int, int, int, int]:
     """
     Process the challenge and returns (x, a, A, k, u, S, M1). Used for user authentification.
 

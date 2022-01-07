@@ -59,7 +59,7 @@ class Low_Level:
 		if rsp.status == status:
 			return True
 
-		treat_response_object(rsp, content, status)
+		self._treat_response_object(rsp, content, status)
 		return False
 
 	async def _treat_response(self, rsp: Union[ClientResponse, SyncResponse]) -> Any:
@@ -120,7 +120,10 @@ class Low_Level:
 
 		:return: True if reachable, False if not
 		"""
-		rsp, content = await self.request("get", "/api")
+
+		# FIXME: doesn't seem to work. Doesn't exist ?
+
+		rsp, content = await self.request("get", "/")
 		return self._treat_response_bool(rsp, content, 200)
 
 	async def register_credentials(self, email: str, salt: str, verifier: str):
@@ -136,7 +139,7 @@ class Low_Level:
 		assert type(salt) is str, f"Expected type 'str' for salt, but got type '{type(salt)}'"
 		assert type(verifier) in (str, None), f"Expected type 'str' for verifier, but got type '{type(verifier)}'"
 
-		rsp, content = await self.request("post", "/register_credentials", { "emailAddress": email, "salt": salt, "verifier": verifier })
+		rsp, content = await self.request("post", "/api/register_credentials", { "emailAddress": email, "salt": salt, "verifier": verifier })
 		rsp = self._treat_response_object(rsp, content, 201)
 
 		# FIXME: handle cases where the response is corrupted
@@ -154,11 +157,11 @@ class Low_Level:
 
 		assert type(email) is str, f"Expected type 'str' for access_key, but got type '{type(email)}'"
 
-		rsp, content = await self.request("post", "/srp_init", { "emailAddress": email })
+		rsp, content = await self.request("post", "/api/srp_init", { "emailAddress": email })
 		return self._treat_response_object(rsp, content, 200)
 
 	async def verify_srp_challenge(self, email: str, A: str, M1: str):
-		rsp, content = await self.request("post", "/srp_verify", { "emailAddress": email, "A": A, "M1": M1 })
+		rsp, content = await self.request("post", "/api/srp_verify", { "emailAddress": email, "A": A, "M1": M1 })
 
 		return self._treat_response_object(rsp, content, 200), rsp.cookies.get("session")
 
@@ -169,6 +172,10 @@ class Low_Level:
 	# TODO: change_password
 
 	# TODO: get_home (stories and generation settings)
+	async def get_home(self) -> Dict[str, Any]:
+		rsp, content = await self.request("get", "/_next/data/NyeurTSLgXM0GBgJePAVZ/home.json")
+
+		return self._treat_response_object(rsp, content, 200)
 
 	# TODO: create_story
 

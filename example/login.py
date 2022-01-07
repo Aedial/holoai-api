@@ -9,7 +9,7 @@ from aiohttp import ClientSession
 
 from asyncio import run
 
-if "HAI_USERNAME" not in env and "HAI_PASSWORD" not in env:
+if "HAI_USERNAME" not in env or "HAI_PASSWORD" not in env:
 	raise RuntimeError("Please ensure that HAI_USERNAME and HAI_PASSWORD are set in your environment")
 
 username = env["HAI_USERNAME"]

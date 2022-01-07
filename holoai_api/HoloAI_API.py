@@ -13,7 +13,7 @@ from os.path import dirname, abspath
 
 class HoloAI_API:
 	# Constants
-	_BASE_ADDRESS: str = "https://writeholo.com/api"
+	_BASE_ADDRESS: str = "https://writeholo.com"
 
 	# Variables
 	_token: Optional[str] = None
