@@ -20,6 +20,5 @@ async def main():
 		api = HoloAI_API(session)
 
 		print(await api.high_level.login(username, password))
-		print(await api.low_level.draw_completions([], api.low_level.ModelName.Model3))
 
 run(main())
