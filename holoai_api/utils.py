@@ -8,48 +8,53 @@ from json import dumps, loads
 from typing import Dict, Union, List, Tuple, Any, Optional, NoReturn
 
 dumps = partial(dumps, separators = (',', ':'))
+def clamp(l, v, h):
+    return (l if v < l else h if h < v else v)
 
-# kudos for Schmitty#5079 for coming up with this function (extracted from ccm.js in sjcl)
-def get_sjcl_ccm_encryption_info_from_iv(content: Dict[str, Any]) -> bytes:
+# kudos to Schmitty#5079 for coming up with the way to convert iv to nonce (extracted from ccm.js in sjcl)
+def decrypt_sjcl_ccm(content: Dict[str, Any], account_key) -> bytes:
+    salt = b64decode(content["salt"])
+    key_len = content["ks"] // 8
+    key_iter = content["iter"]
+    key = PBKDF2(account_key, salt, key_len, key_iter, hmac_hash_module = SHA256)
+
     iv = b64decode(content["iv"])
     tag_len = content["ts"] // 8
-    ct = b64decode(content["ct"])
+    ciphertext = b64decode(content["ct"])
+    cipher_len = len(ciphertext) - tag_len
 
-    iv_len = len(iv)
-    ct_len = len(ct) - tag_len
+    # nonce = iv[0:13] down to iv[0:11] depending on ciphertext length
+    nonce_size = 13 - clamp(0, (cipher_len.bit_length() // 8) - 2, 2)
 
-    # L = max(ct_len.get_bytes(), 4)
-    L = 2
-    while (L < 4) and (ct_len >> 8 * L):
-        L += 1
+    # limit slice size if iv is not big enough
+    nonce_size = min(nonce_size, len(iv))
 
-    if L < 15 - iv_len:
-        L = 15 - ivl
+    nonce = iv[:nonce_size]
+    ciphertext = ciphertext[:cipher_len]
+    tag = ciphertext[cipher_len:]
 
-    return iv[:(15 - L)], ct[:-tag_len], ct[-tag_len:]
+    aes = AES.new(key, AES.MODE_CCM, nonce = nonce)
+    cleartext = aes.decrypt(ciphertext)
 
+    # FIXME: verify why tag does't work (might be another of these damned nonstandard functions)
+#    cleartext = aes.decrypt_and_verify(ciphertext, tag)
+
+    return cleartext
+
+# FIXME: get proper errors ?
 def decrypt_story_content(content: Dict[str, Any], account_key: bytes) -> NoReturn:
-    salt = b64decode(content["salt"])
-
-    cipher = content.get("cipher", "")
-    mode = content.get("mode", "")
+    cipher = content.get("cipher")
+    mode = content.get("mode")
     if cipher == "aes":
         if mode == "ccm":
-            key_len = content["ks"] // 8
-            key_iter = content["iter"]
-
-            account_key = account_key.hex().encode()
-            key = PBKDF2(account_key, salt, key_len, key_iter, hmac_hash_module = SHA256)
-
-            nonce, ct, tag = get_sjcl_ccm_encryption_info_from_iv(content)
-            aes = AES.new(key, AES.MODE_CCM, nonce = nonce)
-            content["ct"] = loads(aes.decrypt(ct).decode())
+            cleartext = decrypt_sjcl_ccm(content, account_key)
         else:
             RuntimeError(f"Unsupported mode for AES, expected CCM, but got {mode}")
 
     else:
         RuntimeError(f"Unsupported cipher, expected aes, but got {cipher}")   
 
+    content["ct"] = loads(cleartext.decode())
     content["decrypted"] = True
 
 def format_and_decrypt_stories(account_key: bytes, *stories: Dict[str, Any]):

@@ -22,7 +22,6 @@ async def main():
 		api = HoloAI_API(session)
 
 		account_key = await api.high_level.login(username, password)
-#		await api.high_level.get_user_data(account_key)
 		print(dumps(await api.high_level.get_user_data(account_key), indent = 4))
 
 run(main())
