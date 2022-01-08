@@ -1,7 +1,7 @@
 from json import loads, dumps
-from uuid import UUID
 from Crypto.Protocol.KDF import PBKDF2
-from Crypto.Hash import SHA256
+from Crypto.Hash import SHA256, SHA1, SHA512
+from hashlib import pbkdf2_hmac
 
 from .utils import format_and_decrypt_stories
 from .srp import create_verifier_and_salt, process_challenge
@@ -50,18 +50,18 @@ class High_Level:
         # verify key_salt structure
 
         self._parent._session.cookies = cookies
-        # FIXME: is it really the key salt ? Why is it an UUID and why is it different from story salt ?
-        key_salt = UUID(key_salt["encryptionKeySalt"]).bytes
-        key = PBKDF2(password, key_salt, 16, 10000, hmac_hash_module = SHA256)
 
-        return key
+        key_salt = key_salt["encryptionKeySalt"].encode()
+        account_key = PBKDF2(password, key_salt, 16, 1, hmac_hash_module = SHA1)
 
-    async def get_user_data(self, key: bytes, password: bytes) -> Dict[str, Any]:
+        return account_key
+
+    async def get_user_data(self, account_key: bytes) -> Dict[str, Any]:
         home = await self._parent.low_level.get_home()
 
         user = home["pageProps"]["user"]
         stories = user["stories"]
 
-        format_and_decrypt_stories(key, password, *stories)
+        format_and_decrypt_stories(account_key, *stories)
 
         return user
