@@ -2,7 +2,6 @@ from os import environ as env
 from sys import path
 from os.path import dirname, abspath, join
 from json import dumps
-from uuid import UUID
 
 path.append(join(dirname(abspath(__file__)), ".."))
 
@@ -22,6 +21,20 @@ async def main():
 		api = HoloAI_API(session)
 
 		account_key = await api.high_level.login(username, password)
-		print(dumps(await api.high_level.get_user_data(account_key), indent = 4))
+		stories = await api.high_level.get_user_data(account_key)
+		print(dumps(stories, indent = 4))
+
+		print("")
+
+		for story in stories["stories"]:
+			story_id = story["id"]
+
+			story = await api.high_level.get_story(story_id, account_key)
+			print(dumps(story, indent = 4))
+
+			snapshots = await api.low_level.read_snapshots(story_id)
+			print(dumps(snapshots, indent = 4))
+
+			print("")
 
 run(main())

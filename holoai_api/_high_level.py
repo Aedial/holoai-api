@@ -60,8 +60,16 @@ class High_Level:
         home = await self._parent.low_level.get_home()
 
         user = home["pageProps"]["user"]
-        stories = user["stories"]
 
+        stories = user["stories"]
         format_and_decrypt_stories(account_key, *stories)
 
         return user
+
+    async def get_story(self, story_id: str, account_key: bytes) -> Dict[str, Any]:
+        story = await self._parent.low_level.get_story(story_id)
+
+        story = story["pageProps"]["story"]
+        format_and_decrypt_stories(account_key, story)
+
+        return story
