@@ -5,6 +5,7 @@ from json import dumps
 from asyncio import run
 from argparse import ArgumentParser
 from math import ceil
+from tqdm import tqdm
 
 path.append(join(dirname(abspath(__file__)), ".."))
 
@@ -80,9 +81,28 @@ async def main():
 															[],
 															args.name)
 
-			print(f"Module queued with id {module['id']}")
+			tune_id = module["id"]
 
-			# TODO: add progress bar with read_prompt_tune polling
+			print(f"Module queued with id {tune_id}")
+
+			progress = tqdm(prefix = "Training", total = steps, unit = "steps")
+
+			while True:
+				state = await api.low_level.read_prompt_tune(tune_id)
+				if not "runState" in state:
+					progress.update(steps)
+					break
+
+				state = state["runState"]
+
+				training_state = state[""]	# FIXME
+				if training_state == "queued":	# FIXME
+					progress.set_description("Queued, waiting for training.")
+				elif training_state == "training":	# FIXME
+					progress.update(state["currentStep"])	# FIXME
+
+			print("Finished training !")
+
 		except Exception as e:
 			await api.low_level.delete_prompt_tune_dataset(dataset_id)
 			raise e
