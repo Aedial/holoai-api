@@ -11,6 +11,7 @@ from aiohttp.http_exceptions import HttpProcessingError
 
 from requests import request as sync_request, Response
 from enum import Enum, auto
+from json import dumps
 
 from typing import Union, Dict, Tuple, List, Iterable, Any, NoReturn, Optional
 
@@ -258,11 +259,11 @@ class Low_Level:
         Model = "model-2-7"
 
     class Prefix(Enum):
-        Novel = { "prefix_name": "{source: googreads}", "tokens": [ 4895, 10459, 2404, 11274, 40779, 2430, 24886, 1298, 15, 92 ] }
-        Fanfic = { "prefix_name": "{source: ao3}", "tokens": [4895, 10459, 2404, 5488, 18, 2430, 24886, 1298, 15, 92 ] }
-        Romance = { "prefix_name": "{source: literotica}", "tokens": [ 4895, 10459, 2404, 17201, 313, 3970, 2430, 24886, 1298, 15, 553, 22872, 2404, 37, 316, 680, 20662 ] }
-        CYOA = { "prefix_name": "{source: cyoa}" }
-        Generic = { "prefix_name": "{}", "tokens": [ 4895, 24886, 1298, 15, 92 ] }
+        Novel = { "prefix_name": "googreads", "tokens": [ 4895, 10459, 2404, 11274, 40779, 2430, 24886, 1298, 15, 92 ] }
+        Fanfic = { "prefix_name": "ao3", "tokens": [4895, 10459, 2404, 5488, 18, 2430, 24886, 1298, 15, 92 ] }
+        Romance = { "prefix_name": "literotica", "tokens": [ 4895, 10459, 2404, 17201, 313, 3970, 2430, 24886, 1298, 15, 553, 22872, 2404, 37, 316, 680, 20662 ] }
+        CYOA = { "prefix_name": "cyoa" }
+        Generic = { "prefix_name": "", "tokens": [ 4895, 24886, 1298, 15, 92 ] }
 
     async def draw_completions(self, input: List[int], model: ModelName, prefix: Prefix, module: Optional[str] = None) -> Dict[str, str]:
         """
@@ -361,6 +362,9 @@ class Low_Level:
 
 
 
+        prefix_value = prefix.value["prefix_name"]
+        prefix_value = {"source": prefix_value} if prefix_value else {}
+
         data = { "checkpoints": checkpoints,
                  "datasetId": dataset_id,
                  "description": description,
@@ -369,7 +373,7 @@ class Low_Level:
                  "modelId": model.value,
                  "nsfw": nsfw,
                  "numTrainSteps": steps,
-                 "prefix": prefix.value["prefix_name"],
+                 "prefix": dumps(prefix_value, separators = (',', ':')),
                  "public": listing is self.Listing.Public,
                  "tags": tags,
                  "title": title
