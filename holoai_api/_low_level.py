@@ -208,7 +208,7 @@ class Low_Level:
 
     # TODO: change_password
 
-    # TODO: get_home (stories and generation settings)
+    # home: stories and generation settings
     async def get_home(self) -> Dict[str, Any]:
         rsp, content = await self.request("get", f"{self.NEXT_PATH}/home.json")
 
@@ -219,16 +219,14 @@ class Low_Level:
 
         return self._treat_response_object(rsp, content, 200)
 
-    # TODO: create_story
-    async def update_story(self, desc: str, title: str, prompt: str) -> Dict:
+    async def create_story(self, desc: str, title: str, prompt: str) -> Dict:
         data = { "description": desc, "story_title": title, "prompt": content }
-        rsp, content = await self.request("post", "/api/update_story", data)
+        rsp, content = await self.request("post", "/api/create_story", data)
 
         return self._treat_response_object(rsp, content, 200)
 
-    # TODO: update_story
-    async def update_story(story_id: str, story: Dict[str, Any]) -> Dict[str, Any]:
-        data = { "set_story": { "id": story_id, "settings": settings } }
+    async def update_story(story_id: str, preview: str, content_change: Dict[str, Any]) -> Dict[str, Any]:
+        data = { "story_id": story_id, "preview": preview, "content_change": content_change }
         rsp, content = await self.request("post", "/api/update_story", data)
 
         return self._treat_response_object(rsp, content, 200)
