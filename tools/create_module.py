@@ -6,6 +6,7 @@ from asyncio import run
 from argparse import ArgumentParser
 from math import ceil
 from tqdm import tqdm
+from time import sleep
 
 path.append(join(dirname(abspath(__file__)), ".."))
 
@@ -34,78 +35,109 @@ def format_file_size(size: Union[float, int, str]) -> str:
     else:
         return f"{size} B"
 
+def format_time(t: Union[float, int]) -> str:
+    ms = f" {int(t * 1000) % 1000} ms" if type(t) is float else ""
+    t = int(t)
+
+    mins = 60
+    hours = 60 * 60
+
+    if t < mins:
+        return f"{t} secs{ms}"
+    elif t < hours:
+        return f"{int(t / mins)} mins {t % mins} secs"
+    else:
+        return f"{int(t / hours)} hours {int(t / mins) % mins} mins"
+
 if "HAI_USERNAME" not in env or "HAI_PASSWORD" not in env:
-	raise RuntimeError("Please ensure that HAI_USERNAME and HAI_PASSWORD are set in your environment")
+    raise RuntimeError("Please ensure that HAI_USERNAME and HAI_PASSWORD are set in your environment")
 
 username = env["HAI_USERNAME"]
 password = env["HAI_PASSWORD"]
 
 async def main():
-	async with ClientSession() as session:
-		api = HoloAI_API(session)
-		Prefix = api.low_level.Prefix
-		Listing = api.low_level.Listing
+    async with ClientSession() as session:
+        api = HoloAI_API(session)
+        Prefix = api.low_level.Prefix
+        Listing = api.low_level.Listing
 
-		account_key = await api.high_level.login(username, password)
+        account_key = await api.high_level.login(username, password)
 
-		size = 0
-		documents = []
-		for filename in listdir(args.directory):
-			with open(join(args.directory, filename)) as f:
-				data = f.read()
-				documents.append({ "filename": filename, "text": data })
-				size += len(data)
+        size = 0
+        documents = []
+        for filename in listdir(args.directory):
+            with open(join(args.directory, filename)) as f:
+                data = f.read()
+                documents.append({ "filename": filename, "text": data })
+                size += len(data)
 
-		percentage = float(args.percentage)
-		prefix = { "novel": Prefix.Novel, "fanfic": Prefix.Fanfic, "romance": Prefix.Romance, "cyoa": Prefix.CYOA, "generic": Prefix.Generic }[args.prefix]
-		visibility = { "private": Listing.Private, "unlisted": Listing.Unlisted, "public": Listing.Public }[args.visibility]
+        percentage = float(args.percentage)
+        prefix = { "novel": Prefix.Novel, "fanfic": Prefix.Fanfic, "romance": Prefix.Romance, "cyoa": Prefix.CYOA, "generic": Prefix.Generic }[args.prefix]
+        visibility = { "private": Listing.Private, "unlisted": Listing.Unlisted, "public": Listing.Public }[args.visibility]
 
-		dataset = await api.low_level.create_prompt_tune_dataset(args.name, documents)
-		dataset_id = dataset["id"]
-		dataset_size = sum(d["tokensLength"] for d in dataset["documents"])
+        dataset = await api.low_level.create_prompt_tune_dataset(args.name, documents)
+        dataset_id = dataset["id"]
+        dataset_size = sum(d["tokensLength"] for d in dataset["documents"])
 
-		steps = ceil(dataset_size / 8192 * percentage / 100)
-		checkpoints = [ *range(0, steps, 20), steps ]
+        steps = ceil(dataset_size / 8192 * percentage / 100)
+        checkpoints = [ *range(0, steps, 20), steps ]
 
-		try:
-			print(f"Training module {args.name} for {steps} steps ({format_file_size(size)})")
-			module = await api.low_level.create_prompt_tune(checkpoints,
-															dataset_id,
-															args.description,
-															True,
-															visibility,
-															api.low_level.ModelName.Model,
-															args.nsfw,
-															steps,
-															prefix,
-															[],
-															args.name)
+        try:
+            print(f"Training module {args.name} for {steps} steps ({format_file_size(size)})")
+            module = await api.low_level.create_prompt_tune(checkpoints,
+                                                            dataset_id,
+                                                            args.description,
+                                                            True,
+                                                            visibility,
+                                                            api.low_level.ModelName.Model,
+                                                            args.nsfw,
+                                                            steps,
+                                                            prefix,
+                                                            [],
+                                                            args.name)
+        except Exception as e:
+            await api.low_level.delete_prompt_tune_dataset(dataset_id)
+            raise e
 
-			tune_id = module["id"]
+        tune_id = module["id"]
 
-			print(f"Module queued with id {tune_id}")
+        print(f"Module queued with id {tune_id}")
 
-			progress = tqdm(prefix = "Training", total = steps, unit = "steps")
+        progress = tqdm(total = steps, unit = "step")
+        progress.set_description("Queued, waiting for training")
 
-			while True:
-				state = await api.low_level.read_prompt_tune(tune_id)
-				if not "runState" in state:
-					progress.update(steps)
-					break
+        while True:
+            state = await api.low_level.read_prompt_tune(tune_id)
 
-				state = state["runState"]
+            run_state = state["data"]["runStatus"]
+            if run_state is None:
+                break
 
-				training_state = state[""]	# FIXME
-				if training_state == "queued":	# FIXME
-					progress.set_description("Queued, waiting for training.")
-				elif training_state == "training":	# FIXME
-					progress.update(state["currentStep"])	# FIXME
+            cur_steps = run_state["currentStepNo"]
+            if cur_steps == 0:
+                progress.refresh()
+                sleep(5)
+            else:
+                progress.n = cur_steps
+                progress.set_description("Training")
+                sleep(1)
 
-			print("Finished training !")
+        progress.n = steps
+        progress.set_description("Finished")
+        progress.close()
 
-		except Exception as e:
-			await api.low_level.delete_prompt_tune_dataset(dataset_id)
-			raise e
+        created_at = int(state["data"]["createdAt"] / 1000)
+        started_at = state["data"]["startedAt"]
+        finished_at = state["data"]["finishedAt"]
+
+        wait = started_at - created_at
+        train = finished_at - started_at
+
+        print(f"Waited {format_time(wait)} in queue, then trained for {format_time(train)}")
+
+        loss_file = f"{args.name} loss.csv" if ' ' in args.name else f"{args.name}_loss.csv"
+        with open(loss_file, "w") as f:
+            print(*state["data"]["trainLossByStep"], sep = ',', end = '', file = f)
 
 parser = ArgumentParser()
 parser.add_argument("name", help = "Name of the module")
