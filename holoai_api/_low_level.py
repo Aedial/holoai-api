@@ -11,6 +11,7 @@ from aiohttp.http_exceptions import HttpProcessingError
 
 from requests import request as sync_request, Response
 from enum import Enum, auto
+from re import compile
 
 from typing import Union, Dict, Tuple, List, Iterable, Any, NoReturn, Optional
 
@@ -32,7 +33,7 @@ class SyncResponse():
 #=== INTERNALS ===#
 #=== API ===#
 class Low_Level:
-	NEXT_PATH = "/_next/data/mD2hyP2lid1GjolKPXBZ5"
+	rgx_next_id = compile(b'"buildId":"([^"]+)"')
 
 	_parent: "HoloAI_API"
 	_session: Union[ClientSession, FakeClientSession]
@@ -122,11 +123,15 @@ class Low_Level:
 		else:
 			return await self._request_sync(method, url, data)
 
-	async def _get_next_id(self):
-		# FIXME
-		raise NotImplementedError()
+	def _get_next_id(self) -> str:
+		rsp = sync_request("get", f"{self._parent._BASE_ADDRESS}/404")
+		match = self.rgx_next_id.findall(rsp.content)
 
-	async def request_with_next(self, endpoint: str, data: Optional[Union[Dict[str, Any], str]]) -> Tuple[Union[ClientResponse, SyncResponse], Any]:
+		assert len(match), "Failed to retrieve id. Please generate an issue for this problem"
+
+		return match[0].decode()
+
+	async def request_with_next(self, method: str, endpoint: str, data: Optional[Union[Dict[str, Any], str]] = None) -> Tuple[Union[ClientResponse, SyncResponse], Any]:
 		"""
 		Send a request through the "next" framework, refreshing the id if necessary
 
@@ -138,17 +143,19 @@ class Low_Level:
 		if not hasattr(self, "_next_id"):
 			self._next_id = self._get_next_id() # get id
 
-		endpoint = f"/_next/data/{self._next_id}/{endpoint}"
+		endpoint_with_next = f"/_next/data/{self._next_id}{endpoint}"
 
 		try:
-			return self.request(method, endpoint, data)
+			return await self.request(method, endpoint_with_next, data)
 		except HoloAIError as e:
 			if e.status != 404:
 				raise e
 
-			# failed to retrieve, next_id might be stub. Refresh id
+			# failed to retrieve, next_id might be out of date. Refresh id
 			self._next_id = self._get_next_id()
-			return self.request(method, endpoint, data)
+			endpoint_with_next = f"/_next/data/{self._next_id}{endpoint}"
+
+			return await self.request(method, endpoint_with_next, data)
 
 	async def is_reachable(self) -> bool:
 		"""
@@ -209,31 +216,31 @@ class Low_Level:
 
 	# TODO: get_home (stories and generation settings)
 	async def get_home(self) -> Dict[str, Any]:
-		rsp, content = await self.request("get", f"{self.NEXT_PATH}/home.json")
+		rsp, content = await self.request_with_next("get", "/home.json")
 
 		return self._treat_response_object(rsp, content, 200)
 
 	async def get_story(self, story_id: str) -> Dict[str, Any]:
-		rsp, content = await self.request("get", f"{self.NEXT_PATH}/write/{story_id}.json")
+		rsp, content = await self.request_with_next("get", f"/write/{story_id}.json")
 
 		return self._treat_response_object(rsp, content, 200)
 
 	# TODO: create_story
 	async def update_story(self, desc: str, title: str, prompt: str) -> Dict:
-		data = { "description": desc, "story_title": title, "prompt": content }
+		data = { "description": desc, "story_title": title, "prompt": prompt }
 		rsp, content = await self.request("post", "/api/update_story", data)
 
 		return self._treat_response_object(rsp, content, 200)
 
 	# TODO: update_story
-	async def update_story(story_id: str, story: Dict[str, Any]) -> Dict[str, Any]:
-		data = { "set_story": { "id": story_id, "settings": settings } }
+	async def update_story(self, story_id: str, story: Dict[str, Any]) -> Dict[str, Any]:
+		data = { "set_story": { "id": story_id, "story": story } }
 		rsp, content = await self.request("post", "/api/update_story", data)
 
 		return self._treat_response_object(rsp, content, 200)
 
 	# TODO: upsert_generation_settings (set story settings)
-	async def upsert_generation_settings(story_id: str, settings: Dict[str, Any]) -> Dict[str, Any]:
+	async def upsert_generation_settings(self, story_id: str, settings: Dict[str, Any]) -> Dict[str, Any]:
 		data = { "set_story": { "id": story_id, "settings": settings } }
 		rsp, content = await self.request("post", "/api/upsert_generation_settings", data)
 
@@ -309,7 +316,7 @@ class Low_Level:
 		return self._treat_response_object(rsp, content, 200)
 
 	async def get_tunes(self) -> Dict[str, Any]:
-		rsp, content = await self.request("get", f"{self.NEXT_PATH}/tuner.json")
+		rsp, content = await self.request_with_next("get", "/tuner.json")
 
 		return self._treat_response_object(rsp, content, 200)
 
