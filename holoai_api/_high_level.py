@@ -44,11 +44,7 @@ class High_Level:
         A = str(A)
         M1 = str(M1)
 
-        key_salt, cookies = await self._parent.low_level.verify_srp_challenge(email, A, M1)
-
-        # verify key_salt structure
-
-        self._parent._session.cookies = cookies
+        key_salt = await self._parent.low_level.verify_srp_challenge(email, A, M1)
 
         key_salt = key_salt["encryptionKeySalt"].encode()
         account_key = PBKDF2(password, key_salt, 16, 1, hmac_hash_module = SHA1)

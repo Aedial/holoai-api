@@ -1,77 +1,93 @@
 from holoai_api.HoloAIError import HoloAIError
-from holoai_api.FakeClientSession import FakeClientSession
 from holoai_api._low_level import Low_Level
 from holoai_api._high_level import High_Level
 
-from aiohttp import ClientSession, ClientTimeout, ClientTimeout
+from aiohttp import ClientSession, ClientTimeout, ClientTimeout, CookieJar
 from multidict import CIMultiDict
 
-from logging import Logger, NullHandler
-from typing import Union, Dict, Tuple, List, Iterable, Any, NoReturn, Optional, MethodDescriptorType
+from logging import Logger
+from typing import NoReturn, Optional
 
 from os.path import dirname, abspath
 
 class HoloAI_API:
-	# Constants
-	_BASE_ADDRESS: str = "https://writeholo.com"
+    # Constants
+    _BASE_ADDRESS: str = "https://writeholo.com"
 
-	# Variables
-	_token: Optional[str] = None
-	_logger: Logger
-	_session: ClientSession
-	_is_async: bool
+    # Variables
+    _logger: Logger
+    _session: Optional[ClientSession]
 
-	_lib_root: str = dirname(abspath(__file__))
+    _lib_root: str = dirname(abspath(__file__))
 
-	### Low Level Public API
-	low_level: Low_Level
-	### High Level Public API
-	high_level: High_Level
+    _timeout: ClientTimeout
+    _headers: CIMultiDict
+    _cookies: CookieJar
 
-	# === Operators === #
-	def __init__(self, session: Optional[ClientSession] = None, logger: Optional[Logger] = None):
-		# variable passing
+    ### Low Level Public API
+    low_level: Low_Level
+    ### High Level Public API
+    high_level: High_Level
 
-		# no session = synchronous
-		self._is_async = (session is not None)
-		if self._is_async:
-			self._session = session
-		else:
-			self._session = FakeClientSession()
+    # === Operators === #
+    def __init__(self, session: Optional[ClientSession] = None, logger: Optional[Logger] = None):
+        # variable passing
 
-		if logger is None:
-			self._logger = Logger("HoloAI_API")
-			self._logger.addHandler(NullHandler())
-		else:
-			self._logger = logger
+        assert session is None or type(session) is ClientSession, f"Expected None or type 'ClientSession' for session, but got type '{type(session)}'"
 
-		# API parts
-		self.low_level = Low_Level(self)
-		self.high_level = High_Level(self)
+        # no session = synchronous
+        self._session = session
 
-	@property
-	def headers(self) -> CIMultiDict:
-		"""
-		Headers of the HTTP requests
-		"""
+        if logger is None:
+            self._logger = Logger("HoloAI_API")
+        else:
+            self._logger = logger
 
-		return self._session.headers
+        self._timeout = ClientTimeout()
+        self._headers = CIMultiDict()
+        self._cookies = CookieJar()
 
-	@property
-	def timeout(self):
-		"""
-		Timeout for a request (in seconds)
-		"""
+        # API parts
+        self.low_level = Low_Level(self)
+        self.high_level = High_Level(self)
 
-		if self._session.timeout is None or self._session.timeout.total is None:
-			return 300	# aiohttp's default
+    def attach_session(self, session: ClientSession) -> NoReturn:
+        """
+        Attach a ClientSession, making the requests asynchronous
+        """
 
-		return self._session.timeout.total
+        assert session is not None
+        assert type(session) is ClientSession, f"Expected type 'ClientSession' for session, but got type '{type(session)}'"
 
-	@timeout.setter
-	def timeout(self, value: int):
-		"""
-		Timeout for a request (in seconds)
-		"""
+        self._session = session
 
-		self._session.timeout = ClientTimeout(value)
+    def detach_session(self) -> NoReturn:
+        """
+        Detach the current ClientSession, making the requests synchronous
+        """
+
+        self._session = None
+
+    @property
+    def headers(self) -> CIMultiDict:
+        """
+        Headers of the HTTP requests
+        """
+
+        return self._session.headers
+
+    @property
+    def timeout(self):
+        """
+        Timeout for a request (in seconds)
+        """
+
+        return self._timeout.total
+
+    @timeout.setter
+    def timeout(self, value: int):
+        """
+        Timeout for a request (in seconds)
+        """
+
+        self._timeout = ClientTimeout(value)

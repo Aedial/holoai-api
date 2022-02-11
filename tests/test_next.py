@@ -18,14 +18,18 @@ if "HAI_USERNAME" not in env or "HAI_PASSWORD" not in env:
 username = env["HAI_USERNAME"]
 password = env["HAI_PASSWORD"]
 
-async def main():
-	async with ClientSession() as session:
-		api = HoloAI_API(session)
-
+async def get_next(api):
 		account_key = await api.high_level.login(username, password)
 
 		print(await api.low_level.get_home())
 #		print(await api.low_level.get_story(story_id))
 		print(await api.low_level.get_tunes())
 
-run(main())
+async def test_get_next_async():
+	async with ClientSession() as session:
+		api = HoloAI_API(session)
+		await get_next(api)
+
+async def test_get_next_sync():
+	api = HoloAI_API()
+	await get_next(api)
