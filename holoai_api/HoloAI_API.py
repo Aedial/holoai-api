@@ -2,6 +2,7 @@ from holoai_api.HoloAIError import HoloAIError
 from holoai_api._low_level import Low_Level
 from holoai_api._high_level import High_Level
 
+from http.cookies import SimpleCookie
 from aiohttp import ClientSession, ClientTimeout, ClientTimeout, CookieJar
 from multidict import CIMultiDict
 
@@ -21,8 +22,8 @@ class HoloAI_API:
     _lib_root: str = dirname(abspath(__file__))
 
     _timeout: ClientTimeout
-    _headers: CIMultiDict
-    _cookies: CookieJar
+    headers: CIMultiDict
+    cookies: SimpleCookie
 
     ### Low Level Public API
     low_level: Low_Level
@@ -32,20 +33,15 @@ class HoloAI_API:
     # === Operators === #
     def __init__(self, session: Optional[ClientSession] = None, logger: Optional[Logger] = None):
         # variable passing
-
         assert session is None or type(session) is ClientSession, f"Expected None or type 'ClientSession' for session, but got type '{type(session)}'"
 
         # no session = synchronous
+        self._logger = Logger("NovelAI_API") if logger is None else logger
         self._session = session
 
-        if logger is None:
-            self._logger = Logger("HoloAI_API")
-        else:
-            self._logger = logger
-
-        self._timeout = ClientTimeout()
-        self._headers = CIMultiDict()
-        self._cookies = CookieJar()
+        self._timeout = ClientTimeout(300)
+        self.headers = CIMultiDict()
+        self.cookies = SimpleCookie()
 
         # API parts
         self.low_level = Low_Level(self)
@@ -56,7 +52,6 @@ class HoloAI_API:
         Attach a ClientSession, making the requests asynchronous
         """
 
-        assert session is not None
         assert type(session) is ClientSession, f"Expected type 'ClientSession' for session, but got type '{type(session)}'"
 
         self._session = session
@@ -69,15 +64,7 @@ class HoloAI_API:
         self._session = None
 
     @property
-    def headers(self) -> CIMultiDict:
-        """
-        Headers of the HTTP requests
-        """
-
-        return self._session.headers
-
-    @property
-    def timeout(self):
+    def timeout(self) -> int:
         """
         Timeout for a request (in seconds)
         """
@@ -85,7 +72,7 @@ class HoloAI_API:
         return self._timeout.total
 
     @timeout.setter
-    def timeout(self, value: int):
+    def timeout(self, value: int) -> NoReturn:
         """
         Timeout for a request (in seconds)
         """

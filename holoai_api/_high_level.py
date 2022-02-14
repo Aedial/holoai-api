@@ -2,8 +2,8 @@ from json import loads, dumps
 from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Hash import SHA1
 
-from .utils import format_and_decrypt_stories
-from .srp import create_verifier_and_salt, process_challenge
+from holoai_api.utils import format_and_decrypt_stories
+from holoai_api.srp import create_verifier_and_salt, process_challenge
 
 from typing import Dict, Any
 
@@ -32,6 +32,7 @@ class High_Level:
 
         :return: Encryption key
         """
+
         challenge = await self._parent.low_level.get_srp_challenge(email)
 
         # verify challenge structure
@@ -44,7 +45,8 @@ class High_Level:
         A = str(A)
         M1 = str(M1)
 
-        key_salt = await self._parent.low_level.verify_srp_challenge(email, A, M1)
+        key_salt, session = await self._parent.low_level.verify_srp_challenge(email, A, M1)
+        self._parent.cookies["session"] = session
 
         key_salt = key_salt["encryptionKeySalt"].encode()
         account_key = PBKDF2(password, key_salt, 16, 1, hmac_hash_module = SHA1)

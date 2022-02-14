@@ -8,7 +8,7 @@ from aiohttp.http_exceptions import HttpProcessingError
 from aiohttp.client_exceptions import ClientConnectionError
 
 from re import compile
-from json import dumps
+from json import dumps, loads
 
 from holoai_api.HoloAIError import HoloAIError
 from holoai_api.types import Model, Prefix, Order_by, Listing
@@ -50,38 +50,63 @@ class Low_Level:
         self._treat_response_object(rsp, content, status)
         return False
 
-    async def _treat_response(self, rsp: ClientResponse) -> Any:
+    async def _treat_response(self, rsp: ClientResponse, data: Any) -> Any:
         if rsp.content_type == "application/json":
-            return (await rsp.json())
+            return (await data.json())
         else:
-            return (await rsp.text())
+            return (await data.text())
 
-    async def _request_async(self, method: str, url: str, session: ClientSession,
-                             data: Optional[Union[Dict[str, Any], str]] = None) -> Tuple[ClientResponse, Any]:
-        """
-        :param url: Url of the request
-        :param method: Method of the request from ClientSession
-        :param session: Session to use for the request
-        :param data: Data to pass to the method if needed
-        """
+    async def _treat_response_stream(self, rsp: ClientResponse, data: bytes) -> Any:
+        data = data.decode()
+
+        if rsp.content_type == "application/json":
+            data = loads(data)
+
+        return data
+
+    async def _request(self, method: str, url: str, session: ClientSession,
+                             data: Union[Dict[str, Any], str], stream: bool) -> Tuple[ClientResponse, Any]:
 
         kwargs = {
             "timeout": self._parent._timeout,
-            "cookies": self._parent._cookies,
-            "headers": self._parent._headers,
+            "cookies": self._parent.cookies,
+            "headers": self._parent.headers,
         }
 
-        try:
-            if type(data) is dict:    # data transforms dict in str
-                async with session.request(method, url, json = data, **kwargs) as rsp:
-                    return (rsp, await self._treat_response(rsp))
-            else:
-                async with session.request(method, url, data = data, **kwargs) as rsp:
-                    return (rsp, await self._treat_response(rsp))
+        kwargs["json" if type(data) is dict else "data"] = data
 
+        async with session.request(method, url, **kwargs) as rsp:
+            if stream:
+                async for i in rsp.content.iter_any():
+                    yield (rsp, await self._treat_response_stream(rsp, i))
+            else:
+                yield (rsp, await self._treat_response(rsp, rsp))
+
+    async def request_stream(self, method: str, endpoint: str, data: Optional[Union[Dict[str, Any], str]] = None,
+                                   stream: bool = True) -> Tuple[ClientResponse, Any]:
+        """
+        Send request with support for data streaming
+
+        :param method: Method of the request (get, post, delete)
+        :param endpoint: Endpoint of the request
+        :param data: Data to pass to the method if needed
+        :param stream: Use data streaming for the response
+        """
+
+        url = f"{self._parent._BASE_ADDRESS}{endpoint}"
+
+        is_sync = self._parent._session is None
+        session = ClientSession() if is_sync else self._parent._session
+
+        try:
+            async for i in self._request(method, url, session, data, stream):
+                yield i
         except ClientConnectionError as e:      # No internet
             raise HoloAIError(e.errno, str(e))
         # TODO: there may be other request errors to catch
+        finally:
+            if is_sync:
+                await session.close()
 
     async def request(self, method: str, endpoint: str, data: Optional[Union[Dict[str, Any], str]] = None) -> Tuple[ClientResponse, Any]:
         """
@@ -92,16 +117,8 @@ class Low_Level:
         :param data: Data to pass to the method if needed
         """
 
-        url = f"{self._parent._BASE_ADDRESS}{endpoint}"
-
-        if self._parent._session is not None:
-            return await self._request_async(method, url, self._parent._session, data)
-        else:
-            async with ClientSession() as session:
-                rsp, content = await self._request_async(method, url, session, data)
-                # FIXME: find why sync request return error 403 - bad credentials (likely cookies)
-
-                return (rsp, content)
+        async for i in self.request_stream(method, endpoint, data, False):
+            return i
 
     async def _get_next_id(self) -> str:
         rsp, content = await self.request("get", "/404")
@@ -183,11 +200,11 @@ class Low_Level:
 
         return content
 
-    async def verify_srp_challenge(self, email: str, A: str, M1: str) -> Tuple[Dict[str, Any], Any]:
+    async def verify_srp_challenge(self, email: str, A: str, M1: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         rsp, content = await self.request("post", "/api/srp_verify", { "emailAddress": email, "A": A, "M1": M1 })
         self._treat_response_object(rsp, content, 200)
 
-        return content
+        return (content, rsp.cookies["session"])
 
     # TODO: delete_user
 
