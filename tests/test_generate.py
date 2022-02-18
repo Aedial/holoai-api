@@ -59,10 +59,13 @@ async def simple_generate(api: HoloAI_API, model: Model, input: str, prefix: Pre
 
     logger.info(f"Using model {model.value} and prefix {prefix.name}\n")
 
+    prefix = prefix.to_prefix_header({})
+
     if tokenize:
         input = Tokenizer.encode(model, input)
+        prefix = Tokenizer.encode(model, prefix)
 
-    gen = await api.low_level.draw_completions(input, model, prefix)
+    gen = await api.low_level.draw_completions(prefix, input, model)
     logger.info(gen)
 
 @pytest.mark.parametrize("model,input,prefix,tokenize", model_input_prefix_permutation)
@@ -81,3 +84,6 @@ async def test_simple_generate_async(model: Model, input: str, prefix: Prefix, t
     except Exception as e:
         await session.close()
         raise e
+
+if __name__ == "__main__":
+    asyncio.run(test_simple_generate_sync(Model.Model_13B, input_txt, Prefix.Romance, True))

@@ -225,8 +225,7 @@ class Low_Level:
 
         return content
 
-    # TODO: create_story
-    async def update_story(self, desc: str, title: str, prompt: str) -> Dict:
+    async def create_story(self, desc: str, title: str, prompt: str) -> Dict:
         data = { "description": desc, "story_title": title, "prompt": prompt }
 
         rsp, content = await self.request("post", "/api/update_story", data)
@@ -234,7 +233,6 @@ class Low_Level:
 
         return content
 
-    # TODO: update_story
     async def update_story(self, story_id: str, story: Dict[str, Any]) -> Dict[str, Any]:
         data = { "set_story": { "id": story_id, "story": story } }
 
@@ -266,28 +264,33 @@ class Low_Level:
 
     # TODO: move_story
 
-    async def draw_completions(self, input: List[int], model: Model, prefix: Prefix, module: Optional[str] = None) -> Dict[str, str]:
+    async def draw_completions(self, prefix: Union[str, List[int]], input: Union[str, List[int]], 
+                                     model: Model, module: Optional[str] = None) -> Dict[str, str]:
         """
-        :param input: Input to be sent the AI
+        :param prefix: Prefix header to be sent to the AI
+        :param input: Input to be sent to the AI
         :param model: Model of the AI
         :param module: Id of the module to use
 
         :return: Generated output
         """
 
+        assert isinstance(prefix, (list, str)), f"Expected type 'list' or 'str' for prefix, but got type '{type(prefix)}'"
         assert isinstance(input, (list, str)), f"Expected type 'list' or 'str' for input, but got type '{type(input)}'"
         assert type(model) is Model, f"Expected type 'Model' for model, but got type '{type(model)}'"
-        assert type(prefix) is Prefix, f"Expected type 'Prefix' for prefix, but got type '{type(prefix)}'"
         assert module is None or type(module) is str, f"Expected type 'str' or 'None' for module, but got type '{type(module)}'"
+
+        if type(prefix) is str:
+            prefix = Tokenizer.encode(model, prefix)
 
         if type(input) is str:
             input = Tokenizer.encode(model, input)
 
         data = {
+            "prefixTokens": prefix,
+            "promptTokens": input,
             "model_name": model.value,
             "module_id": module,
-            "prefixTokens": prefix.value["tokens"],
-            "promptTokens": input,
         }
 
         rsp, content = await self.request("post", "/api/draw_completions", data)
@@ -369,7 +372,7 @@ class Low_Level:
 
 
 
-        prefix_value = prefix.value["prefix_name"]
+        prefix_value = prefix.value.get("prefix_name")
         prefix_value = {"source": prefix_value} if prefix_value else {}
 
         data = { "checkpoints": checkpoints,

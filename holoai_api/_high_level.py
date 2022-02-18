@@ -54,15 +54,18 @@ class High_Level:
         # yes, it is what you think it is: a key restricted to the [49:58] | [97:123] domain
         return account_key.hex().encode()
 
-    async def get_user_data(self, account_key: bytes) -> Dict[str, Any]:
+    async def get_user_data(self) -> Dict[str, Any]:
         home = await self._parent.low_level.get_home()
 
-        user = home["pageProps"]["user"]
+        return home["pageProps"]["user"]
 
+    async def get_stories(self, account_key: bytes) -> Dict[str, Any]:
+        user = await self.get_user_data()
         stories = user["stories"]
+
         format_and_decrypt_stories(account_key, *stories)
 
-        return user
+        return stories
 
     async def get_story(self, story_id: str, account_key: bytes) -> Dict[str, Any]:
         story = await self._parent.low_level.get_story(story_id)

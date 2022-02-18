@@ -42,7 +42,7 @@ def decrypt_sjcl_ccm(content: Dict[str, Any], account_key) -> bytes:
     return cleartext
 
 # FIXME: get proper errors ?
-def decrypt_story_content(content: Dict[str, Any], account_key: bytes) -> NoReturn:
+def decrypt_story_content(content: Dict[str, Any], account_key: bytes, loads_ct: Optional[bool] = False) -> NoReturn:
     cipher = content.get("cipher")
     mode = content.get("mode")
     if cipher == "aes":
@@ -54,15 +54,21 @@ def decrypt_story_content(content: Dict[str, Any], account_key: bytes) -> NoRetu
     else:
         RuntimeError(f"Unsupported cipher, expected aes, but got {cipher}")   
 
-    content["ct"] = loads(cleartext.decode())
+    content["ct"] = cleartext.decode()
+    if loads_ct:
+        content["ct"] = loads(content["ct"])
+
     content["decrypted"] = True
 
 def format_and_decrypt_stories(account_key: bytes, *stories: Dict[str, Any]):
     for story in stories:
         story["genSettings"]["logitBias"] = loads(story["genSettings"]["logitBias"])
 
-        story["content"] = loads(story["content"])
-        if type(story["content"]) is str:	# safer than checking story["encrypted"]
-            story["content"] = loads(story["content"])
+        for field in ("title", "preview", "content", "description"):
+            if story.get(field):
+                story[field] = loads(story[field])
 
-            decrypt_story_content(story["content"], account_key)
+                if type(story[field]) is str:	# safer than checking story["encrypted"]
+                    story[field] = loads(story[field])
+
+                decrypt_story_content(story[field], account_key, (field == "content"))
