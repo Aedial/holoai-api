@@ -7,47 +7,74 @@ from json import dumps, loads
 
 from typing import Dict, Union, List, Tuple, Any, Optional, NoReturn
 
-dumps = partial(dumps, separators = (',', ':'))
+dumps = partial(dumps, separators = (',', ':'), ensure_ascii = False)
 def clamp(l, v, h):
     return (l if v < l else h if h < v else v)
 
-# kudos to Schmitty#5079 for coming up with the way to convert iv to nonce (extracted from ccm.js in sjcl)
-def decrypt_sjcl_ccm(content: Dict[str, Any], account_key) -> bytes:
-    salt = b64decode(content["salt"])
-    key_len = content["ks"] // 8
-    key_iter = content["iter"]
-    key = PBKDF2(account_key, salt, key_len, key_iter, hmac_hash_module = SHA256)
+class Sjcl_ccm:
+    @classmethod
+    def get_key(cls, content: Dict[str, Any], account_key: bytes) -> bytes:
+        salt = b64decode(content["salt"])
+        key_len = content["ks"] // 8
+        key_iter = content["iter"]
+        return PBKDF2(account_key, salt, key_len, key_iter, hmac_hash_module = SHA256)
 
-    iv = b64decode(content["iv"])
-    tag_len = content["ts"] // 8
-    ciphertext = b64decode(content["ct"])
-    cipher_len = len(ciphertext) - tag_len
+    # kudos to Schmitty#5079 for coming up with the way to convert iv to nonce (extracted from ccm.js in sjcl)
+    @classmethod
+    def get_nonce_from_iv(cls, content: Dict[str, Any], ct_len: int) -> bytes:
+        iv = b64decode(content["iv"])
 
-    # nonce = iv[0:13] down to iv[0:11] depending on ciphertext length
-    nonce_size = 13 - clamp(0, (cipher_len.bit_length() // 8) - 2, 2)
+        # nonce = iv[0:13] down to iv[0:11] depending on ciphertext length
+        nonce_size = 13 - clamp(0, (ct_len.bit_length() // 8) - 2, 2)
 
-    # limit slice size if iv is not big enough
-    nonce_size = min(nonce_size, len(iv))
+        # limit slice size if iv is not big enough
+        nonce_size = min(nonce_size, len(iv))
 
-    nonce = iv[:nonce_size]
-    ciphertext = ciphertext[:cipher_len]
-    tag = ciphertext[cipher_len:]
+        return iv[:nonce_size]
 
-    aes = AES.new(key, AES.MODE_CCM, nonce = nonce)
-    cleartext = aes.decrypt(ciphertext)
+    @classmethod
+    def decrypt(cls, content: Dict[str, Any], account_key: bytes) -> bytes:
+        ciphertext = b64decode(content["ct"])
+        tag_len = content["ts"] // 8
 
-    # FIXME: verify why tag does't work (might be another of these damned nonstandard functions)
-#    cleartext = aes.decrypt_and_verify(ciphertext, tag)
+        tag = ciphertext[-tag_len:]
+        ciphertext = ciphertext[:-tag_len]
 
-    return cleartext
+        cipher_len = len(ciphertext)
+        key = cls.get_key(content, account_key)
+        nonce = cls.get_nonce_from_iv(content, cipher_len)
+
+        aes = AES.new(key, AES.MODE_CCM, nonce = nonce, mac_len = tag_len)
+        cleartext = aes.decrypt_and_verify(ciphertext, tag)
+
+        return cleartext
+
+    @classmethod
+    def encrypt(cls, content: Dict[str, Any], account_key: bytes) -> bytes:
+        cleartext = content["ct"]
+        tag_len = content["ts"] // 8
+
+        if type(cleartext) is dict:
+            cleartext = dumps(cleartext)
+
+        cleartext = cleartext.encode()
+
+        clear_len = len(cleartext)
+        key = cls.get_key(content, account_key)
+        nonce = cls.get_nonce_from_iv(content, clear_len)
+
+        aes = AES.new(key, AES.MODE_CCM, nonce = nonce, mac_len = tag_len)
+        ciphertext, tag = aes.encrypt_and_digest(cleartext)
+
+        return b64encode(ciphertext + tag)
 
 # FIXME: get proper errors ?
-def decrypt_story_content(content: Dict[str, Any], account_key: bytes, loads_ct: Optional[bool] = False) -> NoReturn:
+def decrypt_content(content: Dict[str, Any], account_key: bytes, loads_ct: Optional[bool] = False) -> NoReturn:
     cipher = content.get("cipher")
     mode = content.get("mode")
     if cipher == "aes":
         if mode == "ccm":
-            cleartext = decrypt_sjcl_ccm(content, account_key)
+            cleartext = Sjcl_ccm.decrypt(content, account_key)
         else:
             RuntimeError(f"Unsupported mode for AES, expected CCM, but got {mode}")
 
@@ -65,10 +92,43 @@ def format_and_decrypt_stories(account_key: bytes, *stories: Dict[str, Any]):
         story["genSettings"]["logitBias"] = loads(story["genSettings"]["logitBias"])
 
         for field in ("title", "preview", "content", "description"):
-            if story.get(field):
-                story[field] = loads(story[field])
-
-                if type(story[field]) is str:	# safer than checking story["encrypted"]
+            if field in story:
+                if not story[field]:
+                    story[field] = None
+                else:
                     story[field] = loads(story[field])
 
-                decrypt_story_content(story[field], account_key, (field == "content"))
+                    if type(story[field]) is str:	# safer than checking story["encrypted"]
+                        story[field] = loads(story[field])
+
+                    decrypt_content(story[field], account_key, (field == "content"))
+
+def encrypt_content(content: Dict[str, Any], account_key: bytes) -> NoReturn:
+    if content.get("decrypted", False):
+        cipher = content.get("cipher")
+        mode = content.get("mode")
+        if cipher == "aes":
+            if mode == "ccm":
+                cleartext = Sjcl_ccm.encrypt(content, account_key)
+            else:
+                RuntimeError(f"Unsupported mode for AES, expected CCM, but got {mode}")
+
+        else:
+            RuntimeError(f"Unsupported cipher, expected aes, but got {cipher}")   
+
+        content["ct"] = cleartext.decode()
+
+        del content["decrypted"]
+
+def encrypt_and_format_stories(account_key: bytes, *stories: Dict[str, Any]):
+    for story in stories:
+        story["genSettings"]["logitBias"] = dumps(story["genSettings"]["logitBias"])
+
+        for field in ("title", "preview", "content", "description"):
+            if field in story:
+                if story[field] is None:
+                    story[field] = ""
+                else:
+                    encrypt_content(story[field], account_key)
+
+                    story[field] = dumps(dumps(story[field]))
