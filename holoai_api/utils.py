@@ -5,10 +5,18 @@ from Crypto.Hash import SHA256
 from functools import partial
 from json import dumps, loads
 
-from typing import Dict, Union, List, Tuple, Any, Optional, NoReturn
+from holoai_api.types import Model
+from holoai_api.Tokenizer import Tokenizer
+from holoai_api.Preset import Preset
+from holoai_api.BanList import BanList
+from holoai_api.BiasGroup import BiasGroup
+
+from typing import Dict, Union, List, Tuple, Any, Optional, NoReturn, TypeVar
+
+T = TypeVar("T")
 
 dumps = partial(dumps, separators = (',', ':'), ensure_ascii = False)
-def clamp(l, v, h):
+def clamp(l: T, v: T, h: T) -> T:
     return (l if v < l else h if h < v else v)
 
 class Sjcl_ccm:
@@ -26,9 +34,6 @@ class Sjcl_ccm:
 
         # nonce = iv[0:13] down to iv[0:11] depending on ciphertext length
         nonce_size = 13 - clamp(0, (ct_len.bit_length() // 8) - 2, 2)
-
-        # limit slice size if iv is not big enough
-        nonce_size = min(nonce_size, len(iv))
 
         return iv[:nonce_size]
 
@@ -87,7 +92,7 @@ def decrypt_content(content: Dict[str, Any], account_key: bytes, loads_ct: Optio
 
     content["decrypted"] = True
 
-def format_and_decrypt_stories(account_key: bytes, *stories: Dict[str, Any]):
+def format_and_decrypt_stories(account_key: bytes, *stories: Dict[str, Any]) -> NoReturn:
     for story in stories:
         story["genSettings"]["logitBias"] = loads(story["genSettings"]["logitBias"])
 
@@ -120,7 +125,7 @@ def encrypt_content(content: Dict[str, Any], account_key: bytes) -> NoReturn:
 
         del content["decrypted"]
 
-def encrypt_and_format_stories(account_key: bytes, *stories: Dict[str, Any]):
+def encrypt_and_format_stories(account_key: bytes, *stories: Dict[str, Any]) -> NoReturn:
     for story in stories:
         story["genSettings"]["logitBias"] = dumps(story["genSettings"]["logitBias"])
 
@@ -132,3 +137,20 @@ def encrypt_and_format_stories(account_key: bytes, *stories: Dict[str, Any]):
                     encrypt_content(story[field], account_key)
 
                     story[field] = dumps(dumps(story[field]))
+
+def tokenize_if_not(model: Model, o: Union[str, List[int]]) -> List[int]:
+    if type(o) is list:
+        return o
+
+    assert type(o) is str
+    return Tokenizer.encode(model, o)
+
+def build_gen_settings(preset: Preset, banlists: List[BanList], biases: List[BiasGroup]) -> Dict[str, Any]:
+    settings = preset.to_settings()
+
+    # TODO: support tokens ?
+    settings["badWords"] = [b for banlist in banlists for b in banlist if type(b) is str]
+    settings["logitBias"] = { b["value"]: { "bias": b["strength"], "rep_pen_multiplier": b["rep_pen"] }
+                                for bias in biases for b in bias if type(b["value"]) is str }
+
+    return settings

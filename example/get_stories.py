@@ -22,7 +22,7 @@ async def main():
 
         account_key = await api.high_level.login(username, password)
         stories = await api.high_level.get_stories(account_key)
-        print(dumps(stories, indent = 4))
+        print(dumps(stories, indent = 4, ensure_ascii = False))
 
         print("")
 
@@ -31,11 +31,11 @@ async def main():
 
             print("\nStory:")
             story = await api.high_level.get_story(story_id, account_key)
-            print(dumps(story, indent = 4))
+            print(dumps(story, indent = 4, ensure_ascii = False))
 
             print("\nSnapshots:")
             snapshots = await api.low_level.read_snapshots(story_id)
-            print(dumps(snapshots, indent = 4))
+            print(dumps(snapshots, indent = 4, ensure_ascii = False))
 
             print("")
 

@@ -1,10 +1,8 @@
 # Low level interface
 # Functions here have no side effect and return the exact response of the request
 
-from aiohttp import ClientSession, ClientError
+from aiohttp import ClientSession
 from aiohttp.client_reqrep import ClientResponse
-from aiohttp.client import _RequestContextManager
-from aiohttp.http_exceptions import HttpProcessingError
 from aiohttp.client_exceptions import ClientConnectionError
 
 from re import compile
@@ -56,11 +54,27 @@ class Low_Level:
         else:
             return (await data.text())
 
+    def _parse_stream_data(self, stream_content: str) -> Dict[str, Any]:
+        stream_data = {}
+
+        for line in stream_content.splitlines():
+            colon = line.find(":")
+            # TODO: replace by a meaningful error
+            assert ":" != -1, f"Malformed data stream line: {line}"
+
+            stream_data[line[:colon]] = line[colon + 1:]
+
+        return stream_data
+
     async def _treat_response_stream(self, rsp: ClientResponse, data: bytes) -> Any:
         data = data.decode()
 
-        if rsp.content_type == "application/json":
-            data = loads(data)
+        if rsp.content_type == "text/event-stream":
+            stream_data = self._parse_stream_data(data)
+
+            # TODO: replace by a meaningful error
+            assert "data" in stream_data
+            data = loads(stream_data["data"])
 
         return data
 
