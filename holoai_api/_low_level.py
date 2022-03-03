@@ -168,6 +168,15 @@ class Low_Level:
 
             return await self.request(method, endpoint_with_next, data)
 
+    def data_to_url(url: str, data: Dict[str, Any]) -> str:
+        if len(data) == 0:
+            return url
+
+        flatened_data = '&'.join(f"{key}={val}" for key, val in data.items())
+
+        return f"{url}?{flatened_data}"
+
+
     async def is_reachable(self) -> bool:
         """
         Check if the HoloAI API is reachable
@@ -239,16 +248,9 @@ class Low_Level:
 
         return content
 
-    async def create_story(self, desc: str, title: str, prompt: str) -> Dict:
-        data = { "description": desc, "story_title": title, "prompt": prompt }
-
-        rsp, content = await self.request("post", "/api/update_story", data)
-        self._treat_response_object(rsp, content, 200)
-
-        return content
-
+    # same function for create_story
     async def update_story(self, story_id: str, story: Dict[str, Any]) -> Dict[str, Any]:
-        data = { "set_story": { "id": story_id, "story": story } }
+        data = { "story_id": story_id, "content_change": story }
 
         rsp, content = await self.request("post", "/api/update_story", data)
         self._treat_response_object(rsp, content, 200)
