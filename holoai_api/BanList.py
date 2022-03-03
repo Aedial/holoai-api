@@ -1,5 +1,5 @@
 from holoai_api.Preset import Model
-from holoai_api.utils import tokenize_if_not
+from holoai_api.Tokenizer import Tokenizer
 
 from typing import List, Union, Iterable, Union
 
@@ -35,7 +35,7 @@ class BanList:
         return self._sequences.__iter__()
 
     def get_tokenized_banlist(self, model: Model) -> Iterable[List[int]]:
-        return (tokenize_if_not(model, s) for s in self._sequences)
+        return (Tokenizer.tokenize_if_not(model, s) for s in self._sequences)
 
     def __str__(self) -> str:
         return self._sequences.__str__()

@@ -1,5 +1,5 @@
 from holoai_api.Preset import Model
-from holoai_api.utils import tokenize_if_not
+from holoai_api.Tokenizer import Tokenizer
 
 from typing import Dict, Iterable, List, Union, Any
 
@@ -50,7 +50,7 @@ class BiasGroup:
         return ({ "strength": self.strength,
                   "repPen": self.rep_pen,
                   "enabled": self.enabled,
-                  "value": tokenize_if_not(model, s) } for s in self._sequences)
+                  "value": Tokenizer.tokenize_if_not(model, s) } for s in self._sequences)
 
     def __str__(self) -> str:
         return "{ " \

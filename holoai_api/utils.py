@@ -138,13 +138,6 @@ def encrypt_and_format_stories(account_key: bytes, *stories: Dict[str, Any]) -> 
 
                     story[field] = dumps(dumps(story[field]))
 
-def tokenize_if_not(model: Model, o: Union[str, List[int]]) -> List[int]:
-    if type(o) is list:
-        return o
-
-    assert type(o) is str
-    return Tokenizer.encode(model, o)
-
 def build_gen_settings(preset: Preset, banlists: List[BanList], biases: List[BiasGroup]) -> Dict[str, Any]:
     settings = preset.to_settings()
 

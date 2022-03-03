@@ -2,7 +2,7 @@ from os.path import abspath, dirname, join, split
 
 from holoai_api.types import Model
 
-from typing import List
+from typing import List, Union
 
 tokenizers_path = join(dirname(abspath(__file__)), "tokenizers")
 
@@ -53,3 +53,11 @@ class Tokenizer:
         tokenizer = cls._get_tokenizer(model)
 
         return tokenizer.encode(o, verbose = False)
+
+    @classmethod
+    def tokenize_if_not(model: Model, o: Union[str, List[int]]) -> List[int]:
+        if type(o) is list:
+            return o
+
+        assert type(o) is str
+        return Tokenizer.encode(model, o)
