@@ -10,6 +10,7 @@ class StrEnum(str, Enum):
 class Model(StrEnum):
     Model_6B = "gpt-j-6b-2-7"
     Model_13B = "fs-model-0-1"
+    Model_20B = "gpt-neox-20b-1-0"
 
 _DEFAULT_PREFIX_FIELDS = {
     "location": 0,

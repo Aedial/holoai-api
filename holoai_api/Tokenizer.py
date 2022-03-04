@@ -14,11 +14,12 @@ class Tokenizer:
     _tokenizer_name = {
         Model.Model_6B: "gpt2",
         Model.Model_13B: "gpt2",
-        # TODO: add 20B tokenizer
+        Model.Model_20B: join(tokenizers_path, "gpt-neox"),
     }
 
     _tokenizer_base = {
         "gpt2": "GPT2TokenizerFast",
+        "gpt-neox": "GPT2TokenizerFast"
     }
 
     _tokenizer = { }
